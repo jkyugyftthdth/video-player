@@ -86,3 +86,5 @@ input[type='range'].fluent-slider::-moz-range-thumb {
   border: 3px solid var(--thumb-ring, #2b2b2b);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
+
+.vp-hide-cursor, .vp-hide-cursor * { cursor: none !important; }

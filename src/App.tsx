@@ -1380,6 +1380,25 @@ export default function App() {
                     video={currentVideo}
                     isPlaying={isPlaying}
                     currentTime={currentTime}
+                    duration={duration}
+                    volume={volume}
+                    muted={muted}
+                    onSeek={(sec) => {
+                      mediaEngine.seek(sec);
+                      setCurrentTime(sec);
+                    }}
+                    onNext={handleNext}
+                    onPrev={handlePrev}
+                    onChangeVolume={(vol) => {
+                      setVolume(vol);
+                      if (vol > 0 && muted) setMuted(false);
+                      mediaEngine.setVolume(vol, false);
+                    }}
+                    onToggleMute={() => {
+                      const nextMuted = !muted;
+                      setMuted(nextMuted);
+                      mediaEngine.setVolume(volume, nextMuted);
+                    }}
                     theme={theme}
                     accent={accent}
                     fitMode={fitMode}

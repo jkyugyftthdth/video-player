@@ -113,6 +113,7 @@ function serveFile(request) {
   return new Response(Readable.toWeb(fs.createReadStream(filePath, { start, end })), { status, headers });
 }
 
+app.setAppUserModelId('com.videoplayer.desktop');
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
