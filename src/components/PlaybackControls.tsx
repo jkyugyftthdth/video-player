@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Volume2 } from 'lucide-react';
+import { Check, ChevronDown, Crop, RectangleHorizontal, Volume2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { isNativeAudio } from '@/src/media/native';
 import { AccentTheme, VideoItem } from '@/src/types/video';
@@ -123,6 +123,129 @@ export function AudioTrackMenu({ video, accent, onSelect }: AudioTrackMenuProps)
               {a.index === activeIdx && <Check size={14} className="shrink-0" />}
             </button>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export interface ViewSettings {
+  aspect: number | null;
+  crop: number | null;
+  zoom: number;
+}
+export const DEFAULT_VIEW: ViewSettings = { aspect: null, crop: null, zoom: 1 };
+
+const ASPECTS: { label: string; value: number | null }[] = [
+  { label: 'Default (original)', value: null },
+  { label: '16:9', value: 16 / 9 },
+  { label: '4:3', value: 4 / 3 },
+  { label: '21:9', value: 21 / 9 },
+  { label: '2.35:1', value: 2.35 },
+  { label: '16:10', value: 16 / 10 },
+  { label: '5:4', value: 5 / 4 },
+  { label: '1:1', value: 1 },
+  { label: '9:16', value: 9 / 16 },
+];
+const CROPS: { label: string; value: number | null }[] = [
+  { label: 'No crop', value: null },
+  { label: 'Crop to 16:9', value: 16 / 9 },
+  { label: 'Crop to 21:9', value: 21 / 9 },
+  { label: 'Crop to 2.35:1', value: 2.35 },
+  { label: 'Crop to 4:3', value: 4 / 3 },
+  { label: 'Crop to 1:1', value: 1 },
+];
+
+interface ViewMenuProps {
+  kind: 'aspect' | 'crop';
+  view: ViewSettings;
+  onChange: (v: ViewSettings) => void;
+}
+
+export function ViewMenu({ kind, view, onChange }: ViewMenuProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const list = kind === 'aspect' ? ASPECTS : CROPS;
+  const current = kind === 'aspect' ? view.aspect : view.crop;
+  const label = kind === 'aspect' ? 'Aspect' : 'Crop';
+  const Icon = kind === 'aspect' ? RectangleHorizontal : Crop;
+  const active = current !== null || (kind === 'crop' && view.zoom !== 1);
+  const set = (value: number | null) =>
+    onChange(kind === 'aspect' ? { ...view, aspect: value } : { ...view, crop: value });
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={kind === 'aspect' ? 'Aspect ratio' : 'Crop & zoom'}
+        className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-[12.5px] font-medium border backdrop-blur-xs transition-colors ${
+          active
+            ? 'bg-white dark:bg-[#353535] border-black/15 dark:border-white/20 text-neutral-900 dark:text-white'
+            : 'bg-white/85 dark:bg-[#2b2b2b]/85 hover:bg-white dark:hover:bg-[#343434] text-neutral-700 dark:text-neutral-300 border-black/[0.08] dark:border-white/[0.08]'
+        }`}
+      >
+        <Icon size={14} />
+        <span>{label}</span>
+        <ChevronDown size={13} className="opacity-70" />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-9 w-60 py-1.5 rounded-lg bg-white dark:bg-[#2c2c2c] border border-black/10 dark:border-white/10 shadow-xl z-40"
+        >
+          {list.map((o) => (
+            <button
+              key={o.label}
+              type="button"
+              role="menuitemradio"
+              aria-checked={o.value === current}
+              onClick={() => {
+                set(o.value);
+                setOpen(false);
+              }}
+              className="w-full px-3 py-2 flex items-center justify-between text-left text-[13px] text-neutral-800 dark:text-neutral-200 hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"
+            >
+              <span>{o.label}</span>
+              {o.value === current && <Check size={14} />}
+            </button>
+          ))}
+          {kind === 'crop' && (
+            <div className="px-3 pt-2 pb-1 border-t border-black/10 dark:border-white/10 mt-1">
+              <div className="flex items-center justify-between text-[12px] text-neutral-600 dark:text-neutral-300">
+                <span>Zoom</span>
+                <span>{Math.round(view.zoom * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={3}
+                step={0.01}
+                value={view.zoom}
+                onChange={(e) => onChange({ ...view, zoom: Number(e.target.value) })}
+                aria-label="Zoom"
+                className="w-full mt-1"
+              />
+              <button
+                type="button"
+                onClick={() => onChange(DEFAULT_VIEW)}
+                className="mt-1 text-[12px] underline text-neutral-600 dark:text-neutral-300"
+              >
+                Reset aspect, crop & zoom
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -25,7 +25,7 @@ import {
 } from '@/src/types/video';
 import { ACCENT_PALETTES } from '@/src/utils/accent';
 import { FullscreenControls } from './FullscreenControls';
-import { AudioTrackMenu, HdrButton } from './PlaybackControls';
+import { AudioTrackMenu, DEFAULT_VIEW, HdrButton, ViewMenu, ViewSettings } from './PlaybackControls';
 import { VideoCanvasSurface } from './VideoCanvasSurface';
 
 interface VideoStageViewProps {
@@ -102,6 +102,7 @@ export function VideoStageView({
   const subtitleMenuRef = useRef<HTMLDivElement | null>(null);
   const vttInputRef = useRef<HTMLInputElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [view, setView] = useState<ViewSettings>(DEFAULT_VIEW);
   const [subtitleMenuOpen, setSubtitleMenuOpen] = useState(false);
 
   const palette = ACCENT_PALETTES[accent];
@@ -222,6 +223,8 @@ export function VideoStageView({
             <span>{fitMode === 'contain' ? 'Fit' : 'Fill'}</span>
           </button>
 
+          <ViewMenu kind="aspect" view={view} onChange={setView} />
+          <ViewMenu kind="crop" view={view} onChange={setView} />
           <HdrButton video={video} enabled={hdrEnabled} accent={accent} onToggle={onToggleHdr} />
           <AudioTrackMenu video={video} accent={accent} onSelect={onSelectAudioTrack} />
 
@@ -367,6 +370,9 @@ export function VideoStageView({
             fitMode={fitMode}
             postFilter={postFilter}
             hdr={hdrEnabled}
+            aspect={view.aspect}
+            cropAspect={view.crop}
+            zoom={view.zoom}
             className="w-full h-full"
           />
 

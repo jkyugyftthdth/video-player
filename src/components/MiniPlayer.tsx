@@ -180,19 +180,6 @@ export function MiniPlayer({
             postFilter={postFilter}
             className="w-full h-full"
           />
-          <div
-            className={`absolute inset-0 bg-black/25 flex items-center justify-center transition-opacity ${
-              isPlaying ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'
-            }`}
-          >
-            <span className="w-11 h-11 rounded-full bg-black/60 text-white flex items-center justify-center border border-white/20">
-              {isPlaying ? (
-                <Pause size={18} className="fill-current" />
-              ) : (
-                <Play size={18} className="fill-current ml-0.5" />
-              )}
-            </span>
-          </div>
         </div>
 
         {/* Video Info & Controls */}

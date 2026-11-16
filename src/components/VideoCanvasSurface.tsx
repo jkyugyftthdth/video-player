@@ -10,6 +10,11 @@ interface VideoCanvasSurfaceProps {
   postFilter?: VideoFilterMode;
   /** Show the real <video> element (HDR passthrough) instead of the SDR canvas copy. */
   hdr?: boolean;
+  /** Forced display aspect ratio (width/height); null = the video's own. */
+  aspect?: number | null;
+  /** Crop the picture to this window aspect (width/height); null = no crop. */
+  cropAspect?: number | null;
+  zoom?: number;
   className?: string;
 }
 
@@ -26,6 +31,9 @@ export function VideoCanvasSurface({
   fitMode = 'contain',
   postFilter = 'none',
   hdr = false,
+  aspect = null,
+  cropAspect = null,
+  zoom = 1,
   className = '',
 }: VideoCanvasSurfaceProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -251,15 +259,14 @@ export function VideoCanvasSurface({
     };
   }, [video, isPlaying, fitMode]);
 
-  // HDR passthrough: put the actual video element on screen so Windows can present it in HDR.
-  const showNativeVideo = Boolean(hdr && video?.videoUrl && video.isHdr);
+  // Real playback: show the actual <video> element (needed for HDR, and lets us crop / change aspect with CSS).
+  const showNativeVideo = Boolean(video?.videoUrl);
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !showNativeVideo) return;
     const el = mediaEngine.getVideoElement();
     el.removeAttribute('class');
-    el.style.cssText =
-      'position:absolute;inset:0;width:100%;height:100%;background:#09090b;pointer-events:none;';
+    el.style.cssText = 'position:absolute;background:#09090b;pointer-events:none;';
     container.appendChild(el);
     return () => {
       el.removeAttribute('style');
@@ -269,9 +276,62 @@ export function VideoCanvasSurface({
   }, [showNativeVideo, video?.id]);
 
   useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !showNativeVideo) return;
+    const el = mediaEngine.getVideoElement();
+
+    const layout = () => {
+      const cw = container.clientWidth;
+      const ch = container.clientHeight;
+      if (!cw || !ch) return;
+      const srcA = el.videoWidth > 0 && el.videoHeight > 0 ? el.videoWidth / el.videoHeight : 16 / 9;
+      const A = aspect ?? srcA;
+      const fit = (a: number, w: number, h: number, cover: boolean) => {
+        const wide = a > w / h;
+        const useW = cover ? !wide : wide;
+        return useW ? { w, h: w / a } : { w: h * a, h };
+      };
+      // window = visible region (crop window, or the frame when not cropping)
+      const win = cropAspect
+        ? fit(cropAspect, cw, ch, false)
+        : fitMode === 'cover'
+          ? { w: cw, h: ch }
+          : fit(A, cw, ch, false);
+      const box0 = cropAspect || fitMode === 'cover' ? fit(A, win.w, win.h, true) : { w: win.w, h: win.h };
+      const bw = box0.w * zoom;
+      const bh = box0.h * zoom;
+      const bx = (cw - bw) / 2;
+      const by = (ch - bh) / 2;
+      const wx = (cw - win.w) / 2;
+      const wy = (ch - win.h) / 2;
+      const st = el.style;
+      st.left = `${bx}px`;
+      st.top = `${by}px`;
+      st.width = `${bw}px`;
+      st.height = `${bh}px`;
+      st.objectFit = 'fill';
+      const l = Math.max(0, wx - bx), t = Math.max(0, wy - by);
+      const r = Math.max(0, bx + bw - (wx + win.w)), b = Math.max(0, by + bh - (wy + win.h));
+      st.clipPath = l || t || r || b ? `inset(${t}px ${r}px ${b}px ${l}px)` : '';
+    };
+
+    layout();
+    const ro = new ResizeObserver(layout);
+    ro.observe(container);
+    el.addEventListener('loadedmetadata', layout);
+    el.addEventListener('resize', layout);
+    return () => {
+      ro.disconnect();
+      el.removeEventListener('loadedmetadata', layout);
+      el.removeEventListener('resize', layout);
+    };
+  }, [showNativeVideo, video?.id, aspect, cropAspect, zoom, fitMode]);
+
+  // HDR on = pass HDR through to the display; off = limit to SDR (tone-mapped).
+  useEffect(() => {
     if (!showNativeVideo) return;
     const el = mediaEngine.getVideoElement();
-    el.style.objectFit = fitMode === 'cover' ? 'cover' : 'contain';
+    el.style.setProperty('dynamic-range-limit', hdr ? 'no-limit' : 'standard');
     el.style.filter =
       postFilter === 'grayscale'
         ? 'grayscale(1)'
@@ -280,7 +340,7 @@ export function VideoCanvasSurface({
           : postFilter === 'high-contrast'
             ? 'contrast(1.5)'
             : '';
-  }, [showNativeVideo, fitMode, postFilter]);
+  }, [showNativeVideo, hdr, postFilter, video?.id]);
 
   if (!video) {
     return (
