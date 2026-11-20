@@ -236,6 +236,10 @@ class MediaPlaybackEngine {
   private preparedUrls = new Map<string, string>();
   private statusListeners = new Set<(s: PrepareStatus) => void>();
   private loadToken = 0;
+  /** Live (instant-start) ffmpeg stream state; the video element's time is mapped to the file's time. */
+  private live: { item: VideoItem; offset: number; duration: number; fellBack: boolean } | null = null;
+  private nativeSetTime!: (v: number) => void;
+  private nativeGetTime!: () => number;
 
   constructor() {
     this.audio = new Audio();
@@ -246,6 +250,75 @@ class MediaPlaybackEngine {
     this.video.crossOrigin = 'anonymous';
     this.video.preload = 'auto';
     this.video.playsInline = true;
+    this.installLiveTimeMapping();
+  }
+
+  private installLiveTimeMapping() {
+    const ct = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'currentTime')!;
+    const du = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'duration')!;
+    const v = this.video;
+    this.nativeSetTime = (t) => ct.set!.call(v, t);
+    this.nativeGetTime = () => ct.get!.call(v) as number;
+    Object.defineProperty(v, 'currentTime', {
+      configurable: true,
+      get: () => this.nativeGetTime() + (this.live ? this.live.offset : 0),
+      set: (t: number) => {
+        if (this.live) this.liveSeek(t);
+        else this.nativeSetTime(t);
+      },
+    });
+    Object.defineProperty(v, 'duration', {
+      configurable: true,
+      get: () => (this.live ? this.live.duration : (du.get!.call(v) as number)),
+    });
+    v.addEventListener('error', () => {
+      const l = this.live;
+      if (!l || l.fellBack) return;
+      l.fellBack = true;
+      const at = this.nativeGetTime() + l.offset;
+      this.live = null;
+      void this.resolveVideoUrl(l.item).then((url) => {
+        if (!url || this.currentVideoId !== l.item.id) return;
+        v.src = url;
+        v.addEventListener('loadedmetadata', () => this.nativeSetTime(at), { once: true });
+        v.play().catch(() => {});
+      });
+    });
+  }
+
+  private liveUrl(item: VideoItem, startAt: number): string {
+    const plan = planPlayback(item);
+    const streams = item.audioStreams ?? [];
+    const defaultIdx = Math.max(0, streams.findIndex((a) => a.isDefault));
+    const ai = item.activeAudioIndex ?? defaultIdx;
+    const q = new URLSearchParams({
+      v: plan.video,
+      a: plan.audio,
+      ai: String(ai),
+      ch: String(streams[ai]?.channels ?? 2),
+      sur: this.settings.surround ? '1' : '0',
+      tm: item.isHdr && plan.video === 'transcode' ? '1' : '0',
+      hevc: /hevc|h\.265/i.test(item.codec) ? '1' : '0',
+      ss: String(Math.max(0, startAt)),
+    });
+    return `localmedia://live/${encodeURIComponent(item.sourcePath!)}?${q.toString()}`;
+  }
+
+  private liveSeek(t: number) {
+    const l = this.live;
+    if (!l) return;
+    t = Math.max(0, Math.min(t, l.duration || t));
+    const pos = t - l.offset;
+    const b = this.video.buffered;
+    let end = 0;
+    for (let i = 0; i < b.length; i++) if (b.start(i) <= Math.max(0, this.nativeGetTime()) + 0.1) end = Math.max(end, b.end(i));
+    if (pos >= 0 && pos < end - 0.5) {
+      this.nativeSetTime(pos);
+      return;
+    }
+    l.offset = t;
+    this.video.src = this.liveUrl(l.item, t);
+    this.video.play().catch(() => {});
   }
 
   private ensureGraph() {
@@ -419,22 +492,22 @@ class MediaPlaybackEngine {
       const token = ++this.loadToken;
       this.currentVideoId = item.id;
 
-      let url: string | null = item.videoUrl ?? null;
-      if (item.sourcePath && nativeApi()) {
-        if (!planPlayback(item).direct) this.video.pause();
-        url = await this.resolveVideoUrl(item);
-      }
-      if (!url || token !== this.loadToken) return; // failed, or the user picked something else meanwhile
-
-      if (this.video.src !== url) {
-        this.video.src = url;
-        this.video.load();
-      }
-      if (startAt && startAt > 0) {
-        const seekOnce = () => {
-          this.video.currentTime = startAt;
-        };
-        this.video.addEventListener('loadedmetadata', seekOnce, { once: true });
+      const api = nativeApi();
+      if (item.sourcePath && api && !planPlayback(item).direct) {
+        // Instant start: stream through the bundled ffmpeg instead of waiting for a converted file.
+        this.live = { item, offset: startAt > 0 ? startAt : 0, duration: item.duration, fellBack: false };
+        this.video.src = this.liveUrl(item, startAt);
+      } else {
+        this.live = null;
+        const url = item.videoUrl ?? (item.sourcePath && api ? await api.mediaUrl(item.sourcePath) : null);
+        if (!url || token !== this.loadToken) return;
+        if (this.video.src !== url) {
+          this.video.src = url;
+          this.video.load();
+        }
+        if (startAt && startAt > 0) {
+          this.video.addEventListener('loadedmetadata', () => this.nativeSetTime(startAt), { once: true });
+        }
       }
 
       this.video.volume = muted ? 0 : volume;

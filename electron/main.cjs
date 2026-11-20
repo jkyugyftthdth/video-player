@@ -80,8 +80,38 @@ function createWindow() {
   else mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
 }
 
+let liveProc = null;
+async function serveLive(request, url) {
+  const filePath = decodeURIComponent(url.pathname.slice(1));
+  if (!VIDEO_EXT.has(extOf(filePath)) || !fs.existsSync(filePath)) return new Response('Not found', { status: 404 });
+  const q = url.searchParams;
+  const o = {
+    video: q.get('v') === 'copy' ? 'copy' : 'transcode',
+    audio: ['copy', 'aac', 'none'].includes(q.get('a')) ? q.get('a') : 'aac',
+    audioIndex: parseInt(q.get('ai') || '0', 10) || 0,
+    audioChannels: parseInt(q.get('ch') || '2', 10) || 2,
+    surround: q.get('sur') === '1',
+    tonemap: q.get('tm') === '1',
+    hevc: q.get('hevc') === '1',
+    hw: Boolean(settings.hwDecode),
+  };
+  const start = Math.max(0, parseFloat(q.get('ss') || '0') || 0);
+  const args = await media.liveArgs(filePath, o, start);
+  try { liveProc && liveProc.kill(); } catch {}
+  const proc = require('child_process').spawn(media.ffmpegBinary(), args, { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+  liveProc = proc;
+  const kill = () => { try { proc.kill(); } catch {} };
+  request.signal && request.signal.addEventListener('abort', kill);
+  proc.stdout.on('close', kill);
+  return new Response(Readable.toWeb(proc.stdout), {
+    status: 200,
+    headers: { 'Content-Type': 'video/mp4', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' },
+  });
+}
+
 function serveFile(request) {
   const url = new URL(request.url);
+  if (url.host === 'live') return serveLive(request, url);
   const filePath = decodeURIComponent(url.pathname.slice(1));
   const ext = extOf(filePath);
   const inCache = cacheDir && path.resolve(filePath).startsWith(cacheDir);

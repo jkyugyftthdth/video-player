@@ -1313,6 +1313,7 @@ export default function App() {
         <>
           {/* Main Workspace: Sidebar + Content Viewport */}
           <div className="flex-1 min-h-0 flex overflow-hidden">
+            {activeSection !== 'player' && (
             <Sidebar
               collapsed={sidebarCollapsed}
               onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
@@ -1328,8 +1329,9 @@ export default function App() {
               accent={accent}
               onChangeAccent={setAccent}
             />
+            )}
 
-            <main className="flex-1 min-w-0 h-full flex flex-col overflow-hidden bg-[#fafafa] dark:bg-[#1c1c1c] rounded-tl-lg border-t border-l border-black/[0.05] dark:border-white/[0.05]">
+            <main className={`flex-1 min-w-0 h-full flex flex-col overflow-hidden ${activeSection === 'player' ? 'bg-black' : 'bg-[#fafafa] dark:bg-[#1c1c1c] rounded-tl-lg border-t border-l border-black/[0.05] dark:border-white/[0.05]'}`}>
               {/* Top Utility Strip with Search Button on the Right Side */}
               {activeSection !== 'player' && activeSection !== 'settings' && (
                 <div className="px-6 pt-3 pb-1 flex items-center justify-end gap-2 shrink-0">
@@ -1618,6 +1620,7 @@ export default function App() {
           </div>
 
           {/* Bottom Persistent Windows 11 Video Transport Bar */}
+          {activeSection !== 'player' && (
           <PlayerBar
             currentVideo={currentVideo}
             isPlaying={isPlaying}
@@ -1667,6 +1670,7 @@ export default function App() {
             onSelectCollection={openCollectionDetail}
             onSelectCreator={openCreatorDetail}
           />
+          )}
         </>
       )}
 

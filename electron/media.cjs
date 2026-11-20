@@ -215,23 +215,8 @@ function prepareKey(file, st, o) {
     .digest('hex').slice(0, 24);
 }
 
-async function prepare(file, o, cacheDir, onProgress) {
-  // o: { video: 'copy'|'transcode', audio: 'copy'|'aac'|'none', audioIndex, surround, tonemap, hw, duration, hevc, audioChannels }
-  const st = fs.statSync(file);
-  const key = prepareKey(file, st, o);
-  const out = path.join(cacheDir, `${key}.mp4`);
-  if (fs.existsSync(out)) { try { fs.utimesSync(out, new Date(), new Date()); } catch {} return out; }
-  if (jobs.has(key)) return jobs.get(key).promise;
-
-  fs.mkdirSync(cacheDir, { recursive: true });
-  const tmp = `${out}.part.mp4`;
-  const caps = await capabilities();
-
-  const args = ['-hide_banner', '-v', 'error', '-nostdin', '-y'];
-  if (o.hw && o.video === 'transcode') args.push('-hwaccel', 'auto');
-  args.push('-i', file, '-map', '0:v:0');
-  if (o.audio !== 'none') args.push('-map', `0:a:${o.audioIndex || 0}?`);
-
+function codecArgs(o, caps) {
+  const args = [];
   if (o.video === 'copy') {
     args.push('-c:v', 'copy');
     if (o.hevc) args.push('-tag:v', 'hvc1');
@@ -258,6 +243,27 @@ async function prepare(file, o, cacheDir, onProgress) {
     const ch = o.surround ? Math.min(Math.max(o.audioChannels || 2, 2), 6) : 2;
     args.push('-c:a', 'aac', '-ac', String(ch), '-b:a', ch > 2 ? '448k' : '192k');
   }
+  return args;
+}
+
+async function prepare(file, o, cacheDir, onProgress) {
+  // o: { video: 'copy'|'transcode', audio: 'copy'|'aac'|'none', audioIndex, surround, tonemap, hw, duration, hevc, audioChannels }
+  const st = fs.statSync(file);
+  const key = prepareKey(file, st, o);
+  const out = path.join(cacheDir, `${key}.mp4`);
+  if (fs.existsSync(out)) { try { fs.utimesSync(out, new Date(), new Date()); } catch {} return out; }
+  if (jobs.has(key)) return jobs.get(key).promise;
+
+  fs.mkdirSync(cacheDir, { recursive: true });
+  const tmp = `${out}.part.mp4`;
+  const caps = await capabilities();
+
+  const args = ['-hide_banner', '-v', 'error', '-nostdin', '-y'];
+  if (o.hw && o.video === 'transcode') args.push('-hwaccel', 'auto');
+  args.push('-i', file, '-map', '0:v:0');
+  if (o.audio !== 'none') args.push('-map', `0:a:${o.audioIndex || 0}?`);
+
+  args.push(...codecArgs(o, caps));
   args.push('-sn', '-dn', '-map_metadata', '-1', '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', '-f', 'mp4', tmp);
 
   let procRef = null;
@@ -284,6 +290,22 @@ async function prepare(file, o, cacheDir, onProgress) {
   job.promise = promise;
   jobs.set(key, job);
   return promise;
+}
+
+
+/** ffmpeg arguments that stream a fragmented MP4 to stdout, starting at `start` seconds (instant playback, no waiting). */
+async function liveArgs(file, o, start) {
+  const caps = await capabilities();
+  const args = ['-hide_banner', '-v', 'error', '-nostdin'];
+  if (o.hw && o.video === 'transcode') args.push('-hwaccel', 'auto');
+  if (start > 0) args.push('-ss', String(start));
+  args.push('-i', file, '-map', '0:v:0');
+  if (o.audio !== 'none') args.push('-map', `0:a:${o.audioIndex || 0}?`);
+  args.push(...codecArgs(o, caps));
+  if (o.video === 'transcode') args.push('-force_key_frames', 'expr:gte(t,n_forced*2)');
+  args.push('-sn', '-dn', '-map_metadata', '-1', '-avoid_negative_ts', 'make_zero',
+    '-movflags', '+frag_keyframe+empty_moov+default_base_moof', '-f', 'mp4', 'pipe:1');
+  return args;
 }
 
 function cancelAll() {
@@ -313,4 +335,4 @@ function clearCache(cacheDir) {
   try { fs.rmSync(cacheDir, { recursive: true, force: true }); } catch {}
 }
 
-module.exports = { probe, thumbnail, extractSubtitles, capabilities, prepare, cancelAll, pruneCache, clearCache, ffmpegBinary, parseProbe };
+module.exports = { liveArgs, probe, thumbnail, extractSubtitles, capabilities, prepare, cancelAll, pruneCache, clearCache, ffmpegBinary, parseProbe };
