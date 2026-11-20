@@ -336,7 +336,6 @@ class MediaPlaybackEngine {
 
     this.ctx = new AudioCtx();
     this.audioSource = this.ctx.createMediaElementSource(this.audio);
-    this.videoSource = this.ctx.createMediaElementSource(this.video);
 
     this.filters = EQ_FREQUENCIES.map((freq, idx) => {
       const filter = this.ctx!.createBiquadFilter();
@@ -360,7 +359,6 @@ class MediaPlaybackEngine {
 
     // Both audio and video sources feed the shared 10-band EQ + Analyser chain cleanly
     this.audioSource.connect(this.filters[0]);
-    this.videoSource.connect(this.filters[0]);
 
     for (let i = 0; i < this.filters.length - 1; i++) {
       this.filters[i].connect(this.filters[i + 1]);
@@ -369,6 +367,21 @@ class MediaPlaybackEngine {
     this.gainNode.connect(this.analyser);
     this.analyser.connect(this.ctx.destination);
     this.applyOutputSettings();
+  }
+
+  /**
+   * Video audio plays straight from the <video> element (lowest latency, best A/V sync).
+   * It is only routed through the Web Audio equalizer once the user actually changes the EQ.
+   */
+  private ensureVideoInGraph() {
+    if (this.videoSource || !this.ctx || !this.filters.length) return;
+    this.videoSource = this.ctx.createMediaElementSource(this.video);
+    this.videoSource.connect(this.filters[0]);
+  }
+
+  private applyVideoSink() {
+    const v = this.video as HTMLVideoElement & { setSinkId?: (id: string) => Promise<void> };
+    if (!this.videoSource && v.setSinkId) v.setSinkId(this.settings.outputDeviceId || '').catch(() => {});
   }
 
   private applyOutputSettings() {
@@ -385,6 +398,7 @@ class MediaPlaybackEngine {
     if (ctx.setSinkId) {
       ctx.setSinkId(this.settings.outputDeviceId || '').catch(() => {});
     }
+    this.applyVideoSink();
   }
 
   getSettings(): EngineSettings {
@@ -590,6 +604,7 @@ class MediaPlaybackEngine {
       const targetGain = enabled ? Math.max(-12, Math.min(12, bands[idx] ?? 0)) : 0;
       filter.gain.value = targetGain;
     });
+    if (enabled && bands.some((b) => Math.abs(b) > 0.01)) this.ensureVideoInGraph();
   }
 }
 

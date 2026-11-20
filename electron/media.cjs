@@ -241,7 +241,7 @@ function codecArgs(o, caps) {
   if (o.audio === 'copy') args.push('-c:a', 'copy');
   else if (o.audio === 'aac') {
     const ch = o.surround ? Math.min(Math.max(o.audioChannels || 2, 2), 6) : 2;
-    args.push('-c:a', 'aac', '-ac', String(ch), '-b:a', ch > 2 ? '448k' : '192k');
+    args.push('-af', 'aresample=async=1:min_hard_comp=0.05', '-c:a', 'aac', '-ac', String(ch), '-b:a', ch > 2 ? '448k' : '192k');
   }
   return args;
 }
