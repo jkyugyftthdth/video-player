@@ -136,7 +136,7 @@ export interface ViewSettings {
 }
 export const DEFAULT_VIEW: ViewSettings = { aspect: null, crop: null, zoom: 1 };
 
-const ASPECTS: { label: string; value: number | null }[] = [
+export const ASPECTS: { label: string; value: number | null }[] = [
   { label: 'Default (original)', value: null },
   { label: '16:9', value: 16 / 9 },
   { label: '4:3', value: 4 / 3 },
@@ -147,7 +147,7 @@ const ASPECTS: { label: string; value: number | null }[] = [
   { label: '1:1', value: 1 },
   { label: '9:16', value: 9 / 16 },
 ];
-const CROPS: { label: string; value: number | null }[] = [
+export const CROPS: { label: string; value: number | null }[] = [
   { label: 'No crop', value: null },
   { label: 'Crop to 16:9', value: 16 / 9 },
   { label: 'Crop to 21:9', value: 21 / 9 },
@@ -229,7 +229,7 @@ export function ViewMenu({ kind, view, onChange }: ViewMenuProps) {
               </div>
               <input
                 type="range"
-                min={1}
+                min={0.5}
                 max={3}
                 step={0.01}
                 value={view.zoom}

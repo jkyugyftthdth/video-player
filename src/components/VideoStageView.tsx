@@ -25,7 +25,7 @@ import {
 } from '@/src/types/video';
 import { ACCENT_PALETTES } from '@/src/utils/accent';
 import { FullscreenControls } from './FullscreenControls';
-import { AudioTrackMenu, DEFAULT_VIEW, HdrButton, ViewMenu, ViewSettings } from './PlaybackControls';
+import { ASPECTS, AudioTrackMenu, CROPS, DEFAULT_VIEW, HdrButton, ViewMenu, ViewSettings } from './PlaybackControls';
 import { VideoCanvasSurface } from './VideoCanvasSurface';
 
 interface VideoStageViewProps {
@@ -103,6 +103,50 @@ export function VideoStageView({
   const vttInputRef = useRef<HTMLInputElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [view, setView] = useState<ViewSettings>(DEFAULT_VIEW);
+  const [ctx, setCtx] = useState<{ x: number; y: number } | null>(null);
+  const [osd, setOsd] = useState('');
+  const osdTimer = useRef<number | null>(null);
+  const flash = (msg: string) => {
+    setOsd(msg);
+    if (osdTimer.current) window.clearTimeout(osdTimer.current);
+    osdTimer.current = window.setTimeout(() => setOsd(''), 1400);
+  };
+  const cycle = <T,>(list: { label: string; value: T }[], cur: T) => {
+    const i = list.findIndex((o) => o.value === cur);
+    return list[(i + 1) % list.length];
+  };
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const setViewFlash = (v: ViewSettings, msg: string) => {
+    setView(v);
+    flash(msg);
+  };
+
+  // VLC-style shortcuts: A aspect, C crop, Z/Shift+Z zoom, X reset
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || (t.tagName === 'INPUT' && (t as HTMLInputElement).type === 'text'))) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const v = viewRef.current;
+      if (e.code === 'KeyA') {
+        const o = cycle(ASPECTS, v.aspect);
+        setViewFlash({ ...v, aspect: o.value }, `Aspect ratio: ${o.label}`);
+      } else if (e.code === 'KeyC') {
+        const o = cycle(CROPS, v.crop);
+        setViewFlash({ ...v, crop: o.value }, o.label);
+      } else if (e.code === 'KeyZ') {
+        const z = Math.min(3, Math.max(0.5, +(v.zoom + (e.shiftKey ? -0.1 : 0.1)).toFixed(2)));
+        setViewFlash({ ...v, zoom: z }, `Zoom: ${Math.round(z * 100)}%`);
+      } else if (e.code === 'KeyX') {
+        setViewFlash(DEFAULT_VIEW, 'Aspect, crop and zoom reset');
+      } else if (e.code === 'Escape') {
+        setCtx(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const [subtitleMenuOpen, setSubtitleMenuOpen] = useState(false);
 
   const palette = ACCENT_PALETTES[accent];
@@ -360,7 +404,18 @@ export function VideoStageView({
       <div className="relative z-10 flex-1 min-h-0 flex flex-col items-center justify-center py-2">
         <div
           ref={stageBoxRef}
-          className={`relative w-full max-w-5xl aspect-video max-h-[66vh] rounded-xl overflow-hidden shadow-2xl border border-black/15 dark:border-white/15 bg-[#09090b] group ${
+          onWheel={(e) => {
+            if (e.ctrlKey) {
+              const v = viewRef.current;
+              const z = Math.min(3, Math.max(0.5, +(v.zoom + (e.deltaY < 0 ? 0.1 : -0.1)).toFixed(2)));
+              setViewFlash({ ...v, zoom: z }, `Zoom: ${Math.round(z * 100)}%`);
+            } else {
+              const nv = Math.min(1, Math.max(0, +(volume + (e.deltaY < 0 ? 0.05 : -0.05)).toFixed(2)));
+              onChangeVolume(nv);
+              flash(`Volume: ${Math.round(nv * 100)}%`);
+            }
+          }}
+          className={`relative w-full flex-1 min-h-0 rounded-xl overflow-hidden shadow-2xl border border-black/15 dark:border-white/15 bg-[#09090b] group ${
             isFullscreen ? '!max-w-none !max-h-none !w-screen !h-screen rounded-none border-none' : ''
           }`}
         >
@@ -381,10 +436,64 @@ export function VideoStageView({
             type="button"
             onClick={onTogglePlayPause}
             onDoubleClick={handleToggleFullscreen}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              const r = stageBoxRef.current?.getBoundingClientRect();
+              setCtx({ x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) });
+            }}
             aria-label={isPlaying ? 'Pause video' : 'Play video'}
             className="absolute inset-0 cursor-pointer focus:outline-none"
           >
           </button>
+
+          {osd && (
+            <div className="pointer-events-none absolute top-4 left-4 px-3 py-1.5 rounded-md bg-black/70 text-white text-[14px] font-medium">
+              {osd}
+            </div>
+          )}
+
+          {ctx && (
+            <div
+              className="fixed inset-0 z-50"
+              onMouseDown={() => setCtx(null)}
+              onContextMenu={(e) => { e.preventDefault(); setCtx(null); }}
+            >
+              <div
+                onMouseDown={(e) => e.stopPropagation()}
+                style={{
+                  left: Math.min(ctx.x + (stageBoxRef.current?.getBoundingClientRect().left ?? 0), window.innerWidth - 250),
+                  top: Math.min(ctx.y + (stageBoxRef.current?.getBoundingClientRect().top ?? 0), window.innerHeight - 420),
+                }}
+                className="absolute w-60 max-h-[410px] overflow-auto py-1.5 rounded-lg bg-[#2c2c2c] text-white border border-white/10 shadow-2xl text-[13px]"
+              >
+                <div className="px-3 py-1 text-[11px] uppercase tracking-wide text-white/50">Aspect ratio</div>
+                {ASPECTS.map((o) => (
+                  <button key={o.label} type="button" onClick={() => { setViewFlash({ ...view, aspect: o.value }, `Aspect ratio: ${o.label}`); setCtx(null); }}
+                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-white/10 text-left">
+                    <span>{o.label}</span>{o.value === view.aspect && <Check size={13} />}
+                  </button>
+                ))}
+                <div className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-white/50 border-t border-white/10 mt-1">Crop</div>
+                {CROPS.map((o) => (
+                  <button key={o.label} type="button" onClick={() => { setViewFlash({ ...view, crop: o.value }, o.label); setCtx(null); }}
+                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-white/10 text-left">
+                    <span>{o.label}</span>{o.value === view.crop && <Check size={13} />}
+                  </button>
+                ))}
+                <div className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-white/50 border-t border-white/10 mt-1">Zoom</div>
+                <div className="flex flex-wrap gap-1 px-3 pb-1">
+                  {[0.5, 0.75, 1, 1.25, 1.5, 2].map((z) => (
+                    <button key={z} type="button" onClick={() => { setViewFlash({ ...view, zoom: z }, `Zoom: ${Math.round(z * 100)}%`); setCtx(null); }}
+                      className={`px-2 h-7 rounded ${view.zoom === z ? 'bg-white/25' : 'bg-white/10 hover:bg-white/20'}`}>{Math.round(z * 100)}%</button>
+                  ))}
+                </div>
+                <button type="button" onClick={() => { setViewFlash(DEFAULT_VIEW, 'Aspect, crop and zoom reset'); setCtx(null); }}
+                  className="w-full px-3 py-2 mt-1 border-t border-white/10 hover:bg-white/10 text-left">Reset all (X)</button>
+                <button type="button" onClick={() => { handleToggleFullscreen(); setCtx(null); }}
+                  className="w-full px-3 py-2 hover:bg-white/10 text-left">Fullscreen (F)</button>
+              </div>
+            </div>
+          )}
 
           {/* Closed Captions / WebVTT Overlay */}
           {activeCaption && (

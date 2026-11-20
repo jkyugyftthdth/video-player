@@ -8,6 +8,7 @@ HEVC/H.265, AV1, VP9, H.264, ProRes, MPEG-2, VC-1, DivX… and AC3, E-AC3, DTS, 
 - **HDR button** – enabled only for HDR videos (HDR10, HLG, Dolby Vision base layer). Turn on "Use HDR" in Windows Settings > Display.
   If a video can't be decoded directly it is converted (HDR is tone-mapped to SDR in that case).
 - Multiple audio tracks, embedded subtitles, .vtt subtitles
+- VLC-style view controls: right-click the video for Aspect ratio / Crop / Zoom; keys A (aspect), C (crop), Z / Shift+Z (zoom), X (reset), F (fullscreen); mouse wheel = volume, Ctrl+wheel = zoom
 - Keyboard: Space play/pause, ←/→ seek (Shift = 30s), ↑/↓ volume, N/P next/previous, M mute
 
 Converted/remuxed files are cached in the app data folder (Settings > Playback > clear cache).
