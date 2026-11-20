@@ -94,6 +94,7 @@ async function serveLive(request, url) {
     tonemap: q.get('tm') === '1',
     hevc: q.get('hevc') === '1',
     hw: Boolean(settings.hwDecode),
+    audioDelayMs: Math.max(-10000, Math.min(10000, parseInt(q.get('ad') || '0', 10) || 0)),
   };
   const start = Math.max(0, parseFloat(q.get('ss') || '0') || 0);
   const args = await media.liveArgs(filePath, o, start);

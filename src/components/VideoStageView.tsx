@@ -50,6 +50,8 @@ interface VideoStageViewProps {
   fitMode: VideoFitMode;
   postFilter: VideoFilterMode;
   hdrEnabled: boolean;
+  audioDelayMs: number;
+  onAdjustAudioDelay: (deltaMs: number | null) => void;
   onToggleHdr: () => void;
   onSelectAudioTrack: (videoId: string, audioIndex: number) => void;
   onToggleFitMode: () => void;
@@ -94,6 +96,8 @@ export function VideoStageView({
   fitMode,
   postFilter,
   hdrEnabled,
+  audioDelayMs,
+  onAdjustAudioDelay,
   onToggleHdr,
   onSelectAudioTrack,
   onToggleFitMode,
@@ -467,6 +471,15 @@ export function VideoStageView({
                       ))}
                     </>
                   )}
+                  <div className={`${secTitle} ${streams.length > 1 ? 'border-t border-white/10 mt-1' : ''}`}>Audio sync (J / K)</div>
+                  <div className="px-3 pb-2 flex items-center gap-1.5">
+                    <button type="button" className="px-2 h-7 rounded bg-white/10 hover:bg-white/20" onClick={() => onAdjustAudioDelay(-100)} title="Audio earlier">− 100</button>
+                    <button type="button" className="px-2 h-7 rounded bg-white/10 hover:bg-white/20" onClick={() => onAdjustAudioDelay(-50)} title="Audio earlier">− 50</button>
+                    <span className="flex-1 text-center text-[12px] tabular-nums">{audioDelayMs > 0 ? '+' : ''}{audioDelayMs} ms</span>
+                    <button type="button" className="px-2 h-7 rounded bg-white/10 hover:bg-white/20" onClick={() => onAdjustAudioDelay(50)} title="Audio later">+ 50</button>
+                    <button type="button" className="px-2 h-7 rounded bg-white/10 hover:bg-white/20" onClick={() => onAdjustAudioDelay(100)} title="Audio later">+ 100</button>
+                  </div>
+                  <div className="px-3 pb-1 text-[11px] text-white/50">Audio late? press − (earlier). Saved per audio track.</div>
                   <div className={`${secTitle} ${streams.length > 1 ? 'border-t border-white/10 mt-1' : ''}`}>Picture</div>
                   <button type="button" className={rowBtn} onClick={onToggleFitMode}>
                     <span className="flex items-center gap-2"><Scaling size={14} />{fitMode === 'contain' ? 'Fit to window' : 'Fill window'}</span>

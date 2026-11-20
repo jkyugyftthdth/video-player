@@ -1,5 +1,5 @@
 import { EQ_FREQUENCIES, SynthRecipe, VideoItem } from '@/src/types/video';
-import { nativeApi, planPlayback } from '@/src/media/native';
+import { getAudioDelay, nativeApi, planPlayback } from '@/src/media/native';
 
 export interface EngineSettings {
   outputDeviceId: string; // '' = system default
@@ -299,6 +299,7 @@ class MediaPlaybackEngine {
       sur: this.settings.surround ? '1' : '0',
       tm: item.isHdr && plan.video === 'transcode' ? '1' : '0',
       hevc: /hevc|h\.265/i.test(item.codec) ? '1' : '0',
+      ad: String(getAudioDelay(item)),
       ss: String(Math.max(0, startAt)),
     });
     return `localmedia://live/${encodeURIComponent(item.sourcePath!)}?${q.toString()}`;

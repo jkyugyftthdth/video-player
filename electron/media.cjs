@@ -298,9 +298,16 @@ async function liveArgs(file, o, start) {
   const caps = await capabilities();
   const args = ['-hide_banner', '-v', 'error', '-nostdin'];
   if (o.hw && o.video === 'transcode') args.push('-hwaccel', 'auto');
+  const delay = (o.audioDelayMs || 0) / 1000; // + = play audio later, - = earlier
   if (start > 0) args.push('-ss', String(start));
-  args.push('-i', file, '-map', '0:v:0');
-  if (o.audio !== 'none') args.push('-map', `0:a:${o.audioIndex || 0}?`);
+  args.push('-i', file);
+  if (delay !== 0 && o.audio !== 'none') {
+    if (start > 0) args.push('-ss', String(start));
+    args.push('-itsoffset', String(delay), '-i', file, '-map', '0:v:0', '-map', `1:a:${o.audioIndex || 0}?`);
+  } else {
+    args.push('-map', '0:v:0');
+    if (o.audio !== 'none') args.push('-map', `0:a:${o.audioIndex || 0}?`);
+  }
   args.push(...codecArgs(o, caps));
   if (o.video === 'transcode') args.push('-force_key_frames', 'expr:gte(t,n_forced*2)');
   args.push('-sn', '-dn', '-map_metadata', '-1', '-avoid_negative_ts', 'make_zero',

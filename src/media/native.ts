@@ -145,6 +145,31 @@ export interface PlaybackPlan {
 }
 
 /** Decide how to play: straight from disk, or via a fast remux / audio conversion / full transcode. */
+const DELAY_KEY = 'vp-audio-delay';
+const delayId = (item: VideoItem) => {
+  const streams = item.audioStreams ?? [];
+  const di = Math.max(0, streams.findIndex((a) => a.isDefault));
+  return `${item.sourcePath ?? item.id}|${item.activeAudioIndex ?? di}`;
+};
+/** Per-file, per-audio-track sync offset in ms (+ = audio later, - = audio earlier). */
+export function getAudioDelay(item: VideoItem): number {
+  try {
+    return Number(JSON.parse(localStorage.getItem(DELAY_KEY) || '{}')[delayId(item)]) || 0;
+  } catch {
+    return 0;
+  }
+}
+export function setAudioDelay(item: VideoItem, ms: number) {
+  try {
+    const all = JSON.parse(localStorage.getItem(DELAY_KEY) || '{}');
+    if (ms) all[delayId(item)] = ms;
+    else delete all[delayId(item)];
+    localStorage.setItem(DELAY_KEY, JSON.stringify(all));
+  } catch {
+    // storage unavailable
+  }
+}
+
 export function planPlayback(item: VideoItem): PlaybackPlan {
   const streams = item.audioStreams ?? [];
   const defaultIdx = Math.max(0, streams.findIndex((a) => a.isDefault));
@@ -153,7 +178,9 @@ export function planPlayback(item: VideoItem): PlaybackPlan {
   const audioNative = !a || isNativeAudio(a.codec);
   const video: 'copy' | 'transcode' = item.videoNative ? 'copy' : 'transcode';
   const audio: 'copy' | 'aac' | 'none' = !a ? 'none' : audioNative ? 'copy' : 'aac';
-  const direct = Boolean(item.videoNative && item.containerNative && audioNative && idx === defaultIdx);
+  const direct = Boolean(
+    item.videoNative && item.containerNative && audioNative && idx === defaultIdx && getAudioDelay(item) === 0
+  );
   return { direct, video, audio };
 }
 

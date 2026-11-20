@@ -1,4 +1,6 @@
 import {
+  getAudioDelay,
+  setAudioDelay,
   canDecodeVideo,
   containerIsNative,
   isVideoFile,
@@ -526,6 +528,12 @@ export default function App() {
         case 'KeyM':
           setMuted((m) => !m);
           break;
+        case 'KeyJ':
+          handleAdjustAudioDelay(e.shiftKey ? -250 : -50);
+          break;
+        case 'KeyK':
+          handleAdjustAudioDelay(e.shiftKey ? 250 : 50);
+          break;
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -537,7 +545,7 @@ export default function App() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [handleTogglePlayPause, handleNext, handlePrev]);
+  }, [handleTogglePlayPause, handleNext, handlePrev, handleAdjustAudioDelay]);
 
   // Play video with context queue
   const handlePlayVideo = useCallback(
@@ -675,6 +683,26 @@ export default function App() {
     setActivePlaylistId(null);
     setActiveSection('collections');
   }, []);
+
+  const [, setDelayVer] = useState(0);
+  const handleAdjustAudioDelay = useCallback(
+    (deltaMs: number | null) => {
+      const item = currentVideo;
+      if (!item || !item.sourcePath) return;
+      const next = deltaMs === null ? 0 : Math.max(-10000, Math.min(10000, getAudioDelay(item) + deltaMs));
+      setAudioDelay(item, next);
+      setDelayVer((v) => v + 1);
+      showToast(
+        next === 0
+          ? 'Audio sync reset'
+          : `Audio ${next > 0 ? 'later' : 'earlier'} by ${Math.abs(next)} ms`
+      );
+      const at = mediaEngine.getActiveElement().currentTime || currentTime;
+      setIsPlaying(true);
+      mediaEngine.loadAndPlay(item, volume, muted, playbackRate, eqBands, eqEnabled, at);
+    },
+    [currentVideo, currentTime, volume, muted, playbackRate, eqBands, eqEnabled, showToast]
+  );
 
   const handleToggleHdr = useCallback(() => {
     setHdrEnabled((prev) => {
@@ -1406,6 +1434,8 @@ export default function App() {
                     fitMode={fitMode}
                     postFilter={postFilter}
                     hdrEnabled={hdrEnabled}
+                    audioDelayMs={currentVideo ? getAudioDelay(currentVideo) : 0}
+                    onAdjustAudioDelay={handleAdjustAudioDelay}
                     onToggleHdr={handleToggleHdr}
                     onSelectAudioTrack={handleSelectAudioTrack}
                     onToggleFitMode={() =>
